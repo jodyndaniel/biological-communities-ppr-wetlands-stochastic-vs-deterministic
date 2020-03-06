@@ -1,0 +1,203 @@
+#############################################################################################################
+#############################################################################################################
+################################################## FUNCTIONS ################################################
+#############################################################################################################
+#############################################################################################################
+#############################################################################################################
+
+# Libraries that one would need #
+
+library(betapart)
+library(fifer)
+library(plotrix)
+library(RVAideMemoire)
+library(vegan)
+library(vegetarian)
+library(resample)
+library(caTools)
+library(DescTools)
+library(matrixStats)
+library(sampling)
+library(splitstackshape)
+
+#############################################################################################################
+#############################################################################################################
+#############################################################################################################
+#############################################################################################################
+# Is there a difference in alpha diversity amoung permenance classes? #
+#############################################################################################################
+
+# This function  measures alpha diversity within each cluster/grouping
+# for a specified number of sites "r" times. It then runs an ANOVA + posthoc test
+# to determine if differences in alpha diversity differ from zero
+
+# x is the dataframe, 
+# y is the column name for the site grouping
+# z gives the number of sites that should be pulled out on each iteration
+# r is the number of times the function should be repeated
+
+
+AlphaTestRAW <- function(x,y,z,r){
+  
+  {
+    D <- replicate(r,{ # replicate the following function
+      A <- stratified(x, y,z) # using the observed data, subset by "y" group and pull "z" sites out
+      P <- A[,1] # grouping column (permenance class)
+      A <- A[,-1] # abundance data
+      D <- apply(A,1,function(x) H(x,lev="alpha",q=0)) # estimate alpha diversity
+      DP <- cbind.data.frame(D,P) # combine alpha diversity measure with grouping
+      black <- aov(D ~ as.factor(P), data = DP) # run anova
+      rest <- anova(black)# pull out needed results
+      TK <- TukeyHSD(black) # run posthoc test
+      restlist <- rbind(rest[[4]][1], # f-value
+                        rest[[5]][1], # p-value
+                        matrix(TK$`as.factor(P)`[,4],# p-value from post-hoc test
+                               nrow = 6, byrow = FALSE))
+      restlist <- t(restlist) # transpose the results
+      return(restlist)
+    })}
+  colnames(D) = c("F-value","P-value","2-3","2-4","2-5","3-4","3-5","4-5") # name columns
+  TestRR = apply(D,2,rbind) # combine the arrays into rows
+  rownames(TestRR) = 1:r # number by iteration number
+  return(TestRR) # retunr matric of results
+  
+}
+# for example, on our data #
+
+AlphaTestRAW(x = Birds, # dataframe with abundance data (with grouping variable as column 1)
+             y = "Permanence", # column name for grouping variable
+             z = 14, # number of sites in each iteration
+             r = 1000) # number of iterations
+
+#############################################################################################################
+#############################################################################################################
+#############################################################################################################
+#############################################################################################################
+# Is there a difference in beta diversity amoung permenance classess? #
+#############################################################################################################
+# This function  measures beta diversity within each cluster/grouping
+# for a specified number of sites "r" number of times. 
+# It then uses a PERMANOVA + posthoc test to determine whether 
+# differences in beta diversity are different from zero
+
+# x is the dataframe, 
+# y is the column name for the site grouping
+# z gives the number of sites that should be pulled out on each iteration
+# r is the number of times the function should be repeated
+
+BetaSigTesRAW <- function(x,y,z,r){ 
+  {Test <- replicate(r,{
+    A <- stratified(x, y, z) # first, subset the data, pulling  observations per group
+    PerNo <- A[,1] # class
+    A2 <- A[,-1] # abundance
+    Be <- bray.part(A2) # partioned beta
+    BTurn <- Be[[1]] # turnover
+    BNest <- Be[[2]] # nestedness
+    BOv <- Be[[3]] # overall
+    BTurnTest <- adonis(BTurn~PerNo) # permanova for turnover
+    BNestTest <- adonis(BNest~PerNo) # permanova for nestedness
+    BOvTest <- adonis(BOv~PerNo) # permanova for overall beta
+    BT <- rbind(BNestTest$aov.tab[[4]], # f-value for nestedness
+                BNestTest$aov.tab[[6]],# p-value for nestedness
+                BTurnTest$aov.tab[[4]],  # f-value for turonver
+                BTurnTest$aov.tab[[6]],# f-value for turonver
+                BOvTest$aov.tab[[4]],
+                BOvTest$aov.tab[[6]])
+    PerManT <- pairwise.perm.manova(BTurn,PerNo) # post-hoc test for turnover
+    PerManT <- na.omit(matrix(PerManT$p.value))[,1] # pull p-values
+    PerManN <- pairwise.perm.manova(BNest,PerNo) # post-hoc test for nestedness
+    PerManN <- na.omit(matrix(PerManN$p.value))[,1] # pull p-values
+    PerManO <- pairwise.perm.manova(BOv,PerNo) # post-hoc test for overall beta
+    PerManO <- na.omit(matrix(PerManO$p.value))[,1]# pull p-values
+    Test <- rbind(matrix(BT[,1], byrow = FALSE),# combine results by rows, but first give us the permanova results
+                  matrix(PerManN,nrow=6, byrow = FALSE), # now, give us the posthoc test results for nestedness
+                  matrix(PerManT,nrow=6, byrow = FALSE), # same as above, but give is the turnover results
+                  matrix(PerManO, nrow=6, byrow = FALSE)) # same as above, but give the overall beta resuts
+    TestR = t(Test) # transpose the matrix
+    
+  })}
+  # find mean of test values over iteerations
+  Beta = apply(Test,2,rbind) # combine across arrays as rows
+  rownames(Beta) = 1:r # name the rows the respecitive iteration
+  colnames(Beta) = c("NFValue","NPValue","TFValue","TPValue","SFValue","SPValue",
+                     "N2-3","N2-4","N2-5","N3-4","N3-5","N4-5",
+                     "T2-3","T2-4","T2-5","T3-4","T3-5","T4-5", 
+                     "O2-3","O2-4","O2-5","O3-4","O3-5","O4-5")
+  return(Beta)
+}
+
+BetaSigTesRAW(x = Birds, # dataframe with abundance data (with grouping variable as column 1)
+             y = "Permanence", # column name for grouping varibavle
+             z = 14, # number of sites in each iteration
+             r = 1000) # number of iterations
+#############################################################################################################
+#############################################################################################################
+#############################################################################################################
+#############################################################################################################
+# Is there a difference in beta diversity amoung permenance classes in our observed and null datasets? #
+#############################################################################################################
+# This function  measures beta diversity within each cluster/grouping
+# in the null and observed data
+# for a specified number of sites, "r" number of times. 
+# It then uses a paired t-test to measure whether differences
+# in beta diversity differ from zero.
+
+# x is the dataframe for the observed data
+# y is the column name for the site grouping
+# z gives the number of sites that should be pulled out on each iteration
+# r is the number of times the function should be repeated
+# p is the null dataframe 
+# q is the column name for the site grouping in null data
+
+BetaPairTTestRAW <- function(x,y,z,p,q,r){ 
+  {Test <- replicate(r,{
+    A <- stratified(x, y, z)
+    B <- stratified(p, q, z)
+    PerNo <- A[,1] # class
+    A2 <- A[,-1] # abundance
+    PerNoB <- B[,1] # class
+    B2 <- B[,-1] # abundance
+    Be <- bray.part(A2) # partion beta
+    Be2 <- bray.part(B2) # partion beta
+    
+    BTurn <- Be[[1]] # turnover
+    BNest <- Be[[2]] # nestedness
+    BOv <- Be[[3]] # overall beta
+    
+    BTurn2 <- Be2[[1]] # turnover
+    BNest2 <- Be2[[2]] # nestedness
+    BOv2 <- Be2[[3]] # overall beta
+    
+    MBOv <- rowMeans(as.matrix(BOv)) # site dissimalrity per overall
+    MBNest <- rowMeans(as.matrix(BNest))#site dissimalrity nestedness
+    MBTurn <- rowMeans(as.matrix(BTurn))# site dissimalrity turnover
+    
+    MBOv2 <- rowMeans(as.matrix(BOv2)) # site dissimalrity per overall
+    MBNest2 <- rowMeans(as.matrix(BNest2))#site dissimalrity nestedness
+    MBTurn2 <- rowMeans(as.matrix(BTurn2))# site dissimalrity turnover
+    MBOVTest <- t.test(MBOv,MBOv2, paired = TRUE) # paired ttest for overall beta
+    MNestTest <- t.test(MBNest,MBNest2, paired = TRUE) # same for nestedness
+    MTurnTest <- t.test(MBTurn,MBTurn2, paired = TRUE) # same for turnover
+    
+    TestR <- rbind(MNestTest$statistic[[1]],MNestTest$p.value[[1]], # nestedness results
+                   MTurnTest$statistic[[1]],MTurnTest$p.value[[1]], # turnover results
+                   MBOVTest$statistic[[1]], MBOVTest$p.value[[1]]) # overall beta results
+    rownames(TestR) <- c("NTvalue", "NPvalue", "TTvalue", "TPvalue", "STvalue", "SPvalue")
+    TestR <- t(TestR)
+    
+  })}
+  TestRR <- apply(Test,2,rbind) # combine arrays as rows
+  rownames(TestRR) <- 1:r # give each row the respective iteration number
+  return(TestRR)
+}
+
+# for example, running this function on our data #
+
+BetaPairTTestRAW(x = Birds, # observed data with column 1 being the grouping variable
+                 y = "Permanence", # column name for grouping variable for observed data
+                 z = 14, # number of sites per iterations
+                 p = Birds_Null, # null data with column 1 being the grouping variable,
+                                 # this null data were made using the "permatfull" function in 
+                                 # the vegan package, and fixedmar = "rows", shuffle = "both"
+                 q = "Order", # column name for grouping variable in  in null data
+                 r = 1000) # number of iterations
