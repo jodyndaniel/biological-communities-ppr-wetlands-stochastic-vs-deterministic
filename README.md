@@ -4,8 +4,7 @@ For this publication, I used sampling without replacement to deal with our unbal
 
 We were also interested in whether our measured beta diversity was differed from what we would expect by chance.
 
-The data used in this publication are in xlsx format:
-1) sheet 1 -  site information; 2) sheet 2 - bird abundances; sheet 3 - plant cover; and 4) aquatic macroinvertebrate abundances.
+The data used in this publication are in xlsx format: 1) sheet 1 -  site information; 2) sheet 2 - bird abundances; sheet 3 - plant cover; and 4) aquatic macroinvertebrate abundances.
 
 In the code folder are the functions used to run the analyses.
 
